@@ -1,7 +1,8 @@
 PROJECT_NAME     := blinky_pca10059_mbr
 TARGETS          := nrf52840_xxaa
 OUTPUT_DIRECTORY := _build
-DFU_PACKAGE      := $(OUTPUT_DIRECTORY)/nrf52840_xxaa.zip
+DFU_PACKAGE      := $(OUTPUT_DIRECTORY)/nrf52840_xxaa.dfu
+UF2_PACKAGE      := $(OUTPUT_DIRECTORY)/nrf52840_xxaa.uf2
 DFU_PORT         ?= /dev/ttyACM0
 
 
@@ -149,3 +150,11 @@ dfu: $(DFU_PACKAGE)
 	@echo Performing DFU with generated package
 	adafruit-nrfutil dfu serial \
 	    --package $(DFU_PACKAGE) -p $(DFU_PORT) -b 115200
+
+$(UF2_PACKAGE): $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
+	$(HOME)/src/uf2/utils/uf2conv.py $< \
+	    --family 0xADA52840 \
+	    --convert \
+	    --output $@
+
+uf2: $(UF2_PACKAGE)

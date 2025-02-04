@@ -5,7 +5,7 @@
 #include "lib/my_led.h"
 
 enum {
-    blink_period_ms = 500
+    blink_period_ms = 250
 };
 
 int main(void)

@@ -150,14 +150,19 @@ $(foreach target, $(TARGETS), $(call define_target, $(target)))
 dfu_package: $(DFU_PACKAGE)
 
 $(DFU_PACKAGE): $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
+	#@echo Creating DFU package: $(DFU_PACKAGE)
+	#adafruit-nrfutil dfu genpkg \
+	  # --application $< \
+	   #--application-version 1 \
+	   #--dev-type 0x0052 \
+	   #--sd-req 0x0,0x102 \
+	#$@
 	@echo Creating DFU package: $(DFU_PACKAGE)
 	adafruit-nrfutil dfu genpkg \
 	   --application $< \
-	   --application-version 1 \
 	   --dev-type 0x0052 \
-	   --sd-req 0x0,0x102 \
-	   --softdevice $(SDK_ROOT)/components/softdevice/s113/hex/s113_nrf52_7.2.0_softdevice.hex $@
+	$@
 
 dfu: $(DFU_PACKAGE)
 	@echo Performing DFU with generated package
-	adafruit-nrfutil dfu serial --package $< -p $(DFU_PORT) -b 115200
+	adafruit-nrfutil --verbose dfu serial --package $< -p $(DFU_PORT) -b 115200 --singlebank --touch 1200

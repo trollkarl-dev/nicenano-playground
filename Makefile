@@ -30,7 +30,6 @@ SRC_FILES += \
   $(SDK_ROOT)/modules/nrfx/soc/nrfx_atomic.c \
   $(PROJ_DIR)/main.c \
   $(SDK_ROOT)/modules/nrfx/mdk/system_nrf52840.c \
-  $(PROJ_DIR)/lib/my_led.c \
   $(SDK_ROOT)/components/libraries/timer/app_timer2.c \
   $(SDK_ROOT)/components/libraries/timer/drv_rtc.c \
   $(SDK_ROOT)/components/libraries/atomic_fifo/nrf_atfifo.c \
@@ -150,13 +149,6 @@ $(foreach target, $(TARGETS), $(call define_target, $(target)))
 dfu_package: $(DFU_PACKAGE)
 
 $(DFU_PACKAGE): $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
-	#@echo Creating DFU package: $(DFU_PACKAGE)
-	#adafruit-nrfutil dfu genpkg \
-	  # --application $< \
-	   #--application-version 1 \
-	   #--dev-type 0x0052 \
-	   #--sd-req 0x0,0x102 \
-	#$@
 	@echo Creating DFU package: $(DFU_PACKAGE)
 	adafruit-nrfutil dfu genpkg \
 	   --application $< \
@@ -165,4 +157,10 @@ $(DFU_PACKAGE): $(OUTPUT_DIRECTORY)/nrf52840_xxaa.hex
 
 dfu: $(DFU_PACKAGE)
 	@echo Performing DFU with generated package
-	adafruit-nrfutil --verbose dfu serial --package $< -p $(DFU_PORT) -b 115200 --singlebank --touch 1200
+	adafruit-nrfutil --verbose \
+	dfu serial \
+	--package $< \
+	-p $(DFU_PORT) \
+	-b 115200 \
+	--singlebank \
+	--touch 1200

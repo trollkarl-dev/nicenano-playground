@@ -48,6 +48,22 @@
 #endif
 // <h> nRF_Libraries 
 
+#ifndef NRFX_SPIM_ENABLED
+#define NRFX_SPIM_ENABLED 1
+#endif
+
+#ifndef NRFX_SPIM0_ENABLED
+#define NRFX_SPIM0_ENABLED 1
+#endif
+
+#ifndef NRFX_SPIM_DEFAULT_CONFIG_IRQ_PRIORITY
+#define NRFX_SPIM_DEFAULT_CONFIG_IRQ_PRIORITY 6
+#endif
+
+#ifndef NRFX_SPIM_MISO_PULL_CFG
+#define NRFX_SPIM_MISO_PULL_CFG NRF_GPIO_PIN_NOPULL
+#endif
+
 #ifndef APP_TIMER_ENABLED
 #define APP_TIMER_ENABLED 1
 #endif

@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 #include "nrf_gpio.h"
+#include "nrf_atfifo.h"
 
 #include "nrf_drv_clock.h"
 #include "app_timer.h"
@@ -11,13 +12,39 @@
 enum { blink_period_on_ms = 250 };
 enum { blink_period_off_ms = 1000 };
 
-enum { counter_upd_period_ms = 100 };
+enum { counter_upd_period_ms = 250 };
 
 enum { led_pin = NRF_GPIO_PIN_MAP(0, 15) };
 enum { pwr_pin = NRF_GPIO_PIN_MAP(0, 13) };
 
+enum { spim0_fifo_length = 128 };
+
+typedef enum {
+    max7219_no_op = 0x00,
+    max7219_digit_0,
+    max7219_digit_1,
+    max7219_digit_2,
+    max7219_digit_3,
+    max7219_digit_4,
+    max7219_digit_5,
+    max7219_digit_6,
+    max7219_digit_7,
+    max7219_decode_mode,
+    max7219_intensity,
+    max7219_scan_limit,
+    max7219_shutdown,
+    max7219_display_test = 0x0f
+} max7219_reg_t;
+
+typedef struct {
+    max7219_reg_t reg;
+    uint8_t data;
+} max7219_data_portion_t;
+
 APP_TIMER_DEF(blinky_timer);
 APP_TIMER_DEF(counter_timer);
+
+NRF_ATFIFO_DEF(spim0_fifo, max7219_data_portion_t, spim0_fifo_length);
 
 static const nrfx_spim_t
 spim_instance = NRFX_SPIM_INSTANCE(0);
@@ -42,6 +69,8 @@ typedef enum {
     spim_init_result_fail
 } spim_init_result_t;
 
+static void spim0_evt_handler(nrfx_spim_evt_t const * p_event, void *ctx);
+
 static spim_init_result_t spim0_init(void)
 {
     nrfx_err_t err_code;
@@ -53,7 +82,7 @@ static spim_init_result_t spim0_init(void)
 
     config.frequency = NRF_SPIM_FREQ_1M;
 
-    err_code = nrfx_spim_init(&spim_instance, &config, NULL, NULL);
+    err_code = nrfx_spim_init(&spim_instance, &config, spim0_evt_handler, NULL);
 
     return err_code == NRFX_SUCCESS
            ? spim_init_result_success
@@ -72,31 +101,59 @@ static void enable_vcc(void)
     nrf_gpio_pin_write(pwr_pin, 0);
 }
 
-typedef enum {
-    max7219_no_op = 0x00,
-    max7219_digit_0,
-    max7219_digit_1,
-    max7219_digit_2,
-    max7219_digit_3,
-    max7219_digit_4,
-    max7219_digit_5,
-    max7219_digit_6,
-    max7219_digit_7,
-    max7219_decode_mode,
-    max7219_intensity,
-    max7219_scan_limit,
-    max7219_shutdown,
-    max7219_display_test = 0x0f
-} max7219_reg_t;
+static void max7219_put_to_queue(max7219_reg_t reg, uint8_t data)
+{
+    nrf_atfifo_item_put_t item_put_ctx;
+    max7219_data_portion_t *data_portion;
+
+    data_portion = nrf_atfifo_item_alloc(spim0_fifo, &item_put_ctx);
+
+    if (data_portion != NULL)
+    {
+        data_portion->reg = reg;
+        data_portion->data = data;
+
+        nrf_atfifo_item_put(spim0_fifo, &item_put_ctx);
+    }
+}
 
 static void max7219_write(max7219_reg_t reg, uint8_t data)
 {
     uint8_t tx_buffer[] = { reg, data };
+    nrfx_err_t err;
+
     nrfx_spim_xfer_desc_t tx_desc = NRFX_SPIM_XFER_TX(tx_buffer, sizeof(tx_buffer));
-    nrfx_spim_xfer(&spim_instance, &tx_desc, 0);
+    err = nrfx_spim_xfer(&spim_instance, &tx_desc, 0);
+
+    if (err == NRFX_SUCCESS)
+    {
+        return;
+    }
+
+    if (err == NRFX_ERROR_BUSY)
+    {
+        max7219_put_to_queue(reg, data);
+    }
 }
 
-enum { counter_top = 100000000 };
+static void spim0_evt_handler(nrfx_spim_evt_t const * p_event, void *ctx)
+{
+    nrf_atfifo_item_get_t item_get_ctx;
+    max7219_data_portion_t *data_portion_ptr;
+    max7219_data_portion_t data_portion;
+
+    data_portion_ptr = nrf_atfifo_item_get(spim0_fifo, &item_get_ctx);
+
+    if (data_portion_ptr != NULL)
+    {
+        data_portion = *data_portion_ptr;
+        nrf_atfifo_item_free(spim0_fifo, &item_get_ctx);
+
+        max7219_write(data_portion.reg, data_portion.data);
+    }
+}
+
+enum { counter_top = 10000 };
 static volatile uint32_t counter = 0;
 
 static void counter_timer_handler(void *ctx)
@@ -141,6 +198,8 @@ int main(void)
     app_timer_create(&counter_timer,
                      APP_TIMER_MODE_REPEATED,
                      counter_timer_handler);
+
+    NRF_ATFIFO_INIT(spim0_fifo);
 
     if (spim_init_result_success == spim0_init())
     {

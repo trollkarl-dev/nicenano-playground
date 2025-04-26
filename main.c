@@ -46,6 +46,11 @@ APP_TIMER_DEF(counter_timer);
 
 NRF_ATFIFO_DEF(spim0_fifo, max7219_data_portion_t, spim0_fifo_length);
 
+enum { spim0_tx_buflen = 2 };
+static volatile uint8_t spim0_tx_buffer[spim0_tx_buflen];
+
+static volatile bool spim0_busy = false;
+
 static const nrfx_spim_t
 spim_instance = NRFX_SPIM_INSTANCE(0);
 
@@ -117,23 +122,25 @@ static void max7219_put_to_queue(max7219_reg_t reg, uint8_t data)
     }
 }
 
+static void max7219_write_unsafe(max7219_reg_t reg, uint8_t data)
+{
+    spim0_tx_buffer[0] = reg;
+    spim0_tx_buffer[1] = data;
+
+    nrfx_spim_xfer_desc_t tx_desc = NRFX_SPIM_XFER_TX(spim0_tx_buffer, spim0_tx_buflen);
+    nrfx_spim_xfer(&spim_instance, &tx_desc, 0);
+}
+
 static void max7219_write(max7219_reg_t reg, uint8_t data)
 {
-    uint8_t tx_buffer[] = { reg, data };
-    nrfx_err_t err;
-
-    nrfx_spim_xfer_desc_t tx_desc = NRFX_SPIM_XFER_TX(tx_buffer, sizeof(tx_buffer));
-    err = nrfx_spim_xfer(&spim_instance, &tx_desc, 0);
-
-    if (err == NRFX_SUCCESS)
+    if (spim0_busy)
     {
-        return;
+        return max7219_put_to_queue(reg, data);
     }
 
-    if (err == NRFX_ERROR_BUSY)
-    {
-        max7219_put_to_queue(reg, data);
-    }
+    spim0_busy = true;
+    
+    max7219_write_unsafe(reg, data);
 }
 
 static void spim0_evt_handler(nrfx_spim_evt_t const * p_event, void *ctx)
@@ -149,7 +156,11 @@ static void spim0_evt_handler(nrfx_spim_evt_t const * p_event, void *ctx)
         data_portion = *data_portion_ptr;
         nrf_atfifo_item_free(spim0_fifo, &item_get_ctx);
 
-        max7219_write(data_portion.reg, data_portion.data);
+        max7219_write_unsafe(data_portion.reg, data_portion.data);
+    }
+    else
+    {
+        spim0_busy = false;
     }
 }
 
@@ -206,23 +217,24 @@ int main(void)
         app_timer_start(blinky_timer,
                         APP_TIMER_TICKS(blink_period_on_ms),
                         NULL);
+
+        max7219_write(max7219_shutdown, 0); /* disable display */
+        max7219_write(max7219_decode_mode, 0xff); /* decode all digits */
+        max7219_write(max7219_intensity, 0x05); /* 11/32 intensity */
+        max7219_write(max7219_scan_limit, 0x07); /* display all digits */
+
+        for (i = 0; i < 8; i++)
+        {
+            max7219_write(max7219_digit_0 + i, 0x0f);
+        }
+
+        max7219_write(max7219_shutdown, 1); /* enable display */
+
+        app_timer_start(counter_timer,
+                        APP_TIMER_TICKS(counter_upd_period_ms),
+                        NULL);
     }
 
-    max7219_write(max7219_shutdown, 0); /* disable display */
-    max7219_write(max7219_decode_mode, 0xff); /* decode all digits */
-    max7219_write(max7219_intensity, 0x05); /* 11/32 intensity */
-    max7219_write(max7219_scan_limit, 0x07); /* display all digits */
-
-    for (i = 0; i < 8; i++)
-    {
-        max7219_write(max7219_digit_0 + i, 0x0f);
-    }
-
-    max7219_write(max7219_shutdown, 1); /* enable display */
-
-    app_timer_start(counter_timer,
-                    APP_TIMER_TICKS(counter_upd_period_ms),
-                    NULL);
     while (true)
     {
     }

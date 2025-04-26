@@ -10,6 +10,12 @@
 #include "nrfx_spim.h"
 #include "nrfx_pwm.h"
 
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
+#include "nrf_log_default_backends.h"
+
+#include "nrf_log_backend_usb.h"
+
 enum { blink_period_on_ms = 250 };
 enum { blink_period_off_ms = 1000 };
 
@@ -64,6 +70,8 @@ static void blinky_timer_handler(void *ctx)
     static bool led_is_active = true;
 
     nrf_gpio_pin_toggle(led_pin);
+
+    NRF_LOG_INFO("%s: Main LED toggle", __func__);
 
     app_timer_start(blinky_timer,
                     APP_TIMER_TICKS(led_is_active
@@ -277,6 +285,14 @@ static void pwm0_init(void)
     nrfx_pwm_simple_playback(&pwm0, &pwm0_sequence, 1, NRFX_PWM_FLAG_LOOP);
 }
 
+static void logs_init(void)
+{
+    ret_code_t ret = NRF_LOG_INIT(NULL);
+    APP_ERROR_CHECK(ret);
+
+    NRF_LOG_DEFAULT_BACKENDS_INIT();
+}
+
 int main(void)
 {
     enable_vcc();
@@ -285,11 +301,15 @@ int main(void)
     nrf_drv_clock_init();
     nrf_drv_clock_lfclk_request(NULL);
 
+    logs_init();
+
     timers_init();
     pwm0_init();
     spim0_display_init();
 
     while (true)
     {
+        NRF_LOG_PROCESS();
+        LOG_BACKEND_USB_PROCESS();
     }
 }

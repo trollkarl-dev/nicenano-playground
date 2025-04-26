@@ -231,7 +231,11 @@ static void timers_init(void)
 }
 
 static uint16_t pwm0_duty_cycles[] = {
-    0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+    10 | 0x8000,
+    25 | 0x8000,
+    50 | 0x8000,
+    75 | 0x8000,
+    90 | 0x8000
 };
 
 static nrf_pwm_sequence_t pwm0_sequence = {

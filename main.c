@@ -8,6 +8,7 @@
 #include "app_timer.h"
 
 #include "nrfx_spim.h"
+#include "nrfx_pwm.h"
 
 enum { blink_period_on_ms = 250 };
 enum { blink_period_off_ms = 1000 };
@@ -69,30 +70,8 @@ static void blinky_timer_handler(void *ctx)
     led_is_active = !led_is_active;
 }
 
-typedef enum {
-    spim_init_result_success,
-    spim_init_result_fail
-} spim_init_result_t;
-
 static void spim0_evt_handler(nrfx_spim_evt_t const * p_event, void *ctx);
 
-static spim_init_result_t spim0_init(void)
-{
-    nrfx_err_t err_code;
-    nrfx_spim_config_t config = NRFX_SPIM_DEFAULT_CONFIG;
-
-    config.sck_pin = NRF_GPIO_PIN_MAP(0, 17);
-    config.mosi_pin = NRF_GPIO_PIN_MAP(0, 20);
-    config.ss_pin = NRF_GPIO_PIN_MAP(0, 22);
-
-    config.frequency = NRF_SPIM_FREQ_1M;
-
-    err_code = nrfx_spim_init(&spim_instance, &config, spim0_evt_handler, NULL);
-
-    return err_code == NRFX_SUCCESS
-           ? spim_init_result_success
-           : spim_init_result_fail;
-}
 
 static void led_init(void)
 {
@@ -191,17 +170,53 @@ static void counter_timer_handler(void *ctx)
     counter++;
 }
 
-int main(void)
+static void spim0_display_init(void)
 {
     int i;
 
-    enable_vcc();
-    led_init();
+    nrfx_err_t err_code;
+    nrfx_spim_config_t config = NRFX_SPIM_DEFAULT_CONFIG;
 
-    nrf_drv_clock_init();
-    nrf_drv_clock_lfclk_request(NULL);
+    config.sck_pin = NRF_GPIO_PIN_MAP(0, 17);
+    config.mosi_pin = NRF_GPIO_PIN_MAP(0, 20);
+    config.ss_pin = NRF_GPIO_PIN_MAP(0, 22);
 
+    config.frequency = NRF_SPIM_FREQ_1M;
+
+    err_code = nrfx_spim_init(&spim_instance, &config, spim0_evt_handler, NULL);
+
+    if (err_code != NRFX_SUCCESS)
+    {
+        return;
+    }
+
+    NRF_ATFIFO_INIT(spim0_fifo);
+
+    app_timer_start(blinky_timer,
+                    APP_TIMER_TICKS(blink_period_on_ms),
+                    NULL);
+
+    max7219_write(max7219_shutdown, 0); /* disable display */
+    max7219_write(max7219_decode_mode, 0xff); /* decode all digits */
+    max7219_write(max7219_intensity, 0x05); /* 11/32 intensity */
+    max7219_write(max7219_scan_limit, 0x07); /* display all digits */
+
+    for (i = 0; i < 8; i++)
+    {
+        max7219_write(max7219_digit_0 + i, 0x0f);
+    }
+
+    max7219_write(max7219_shutdown, 1); /* enable display */
+
+    app_timer_start(counter_timer,
+                    APP_TIMER_TICKS(counter_upd_period_ms),
+                    NULL);
+}
+
+static void timers_init(void)
+{
     app_timer_init();
+
     app_timer_create(&blinky_timer,
                      APP_TIMER_MODE_SINGLE_SHOT,
                      blinky_timer_handler);
@@ -209,31 +224,19 @@ int main(void)
     app_timer_create(&counter_timer,
                      APP_TIMER_MODE_REPEATED,
                      counter_timer_handler);
+}
 
-    NRF_ATFIFO_INIT(spim0_fifo);
+int main(void)
+{
+    enable_vcc();
+    led_init();
 
-    if (spim_init_result_success == spim0_init())
-    {
-        app_timer_start(blinky_timer,
-                        APP_TIMER_TICKS(blink_period_on_ms),
-                        NULL);
+    nrf_drv_clock_init();
+    nrf_drv_clock_lfclk_request(NULL);
 
-        max7219_write(max7219_shutdown, 0); /* disable display */
-        max7219_write(max7219_decode_mode, 0xff); /* decode all digits */
-        max7219_write(max7219_intensity, 0x05); /* 11/32 intensity */
-        max7219_write(max7219_scan_limit, 0x07); /* display all digits */
+    timers_init();
 
-        for (i = 0; i < 8; i++)
-        {
-            max7219_write(max7219_digit_0 + i, 0x0f);
-        }
-
-        max7219_write(max7219_shutdown, 1); /* enable display */
-
-        app_timer_start(counter_timer,
-                        APP_TIMER_TICKS(counter_upd_period_ms),
-                        NULL);
-    }
+    spim0_display_init();
 
     while (true)
     {

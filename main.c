@@ -18,6 +18,10 @@ enum { counter_upd_period_ms = 250 };
 enum { led_pin = NRF_GPIO_PIN_MAP(0, 15) };
 enum { pwr_pin = NRF_GPIO_PIN_MAP(0, 13) };
 
+enum { pwm_pin = NRF_GPIO_PIN_MAP(0, 24) };
+
+nrfx_pwm_t pwm0 = NRFX_PWM_INSTANCE(0);
+
 enum { spim0_fifo_length = 128 };
 
 typedef enum {
@@ -226,6 +230,49 @@ static void timers_init(void)
                      counter_timer_handler);
 }
 
+static uint16_t pwm0_duty_cycles[] = {
+    0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+};
+
+static nrf_pwm_sequence_t pwm0_sequence = {
+    .values.p_common = pwm0_duty_cycles,
+    .length = sizeof(pwm0_duty_cycles) / sizeof(uint16_t),
+    .repeats = 0,
+    .end_delay = 0
+};
+
+static void pwm0_evt_handler(nrfx_pwm_evt_type_t evt)
+{
+
+}
+
+static void pwm0_init(void)
+{
+    nrfx_pwm_config_t config;
+    nrfx_err_t err;
+
+    config.output_pins[0] = pwm_pin;
+    config.output_pins[1] = NRFX_PWM_PIN_NOT_USED;
+    config.output_pins[2] = NRFX_PWM_PIN_NOT_USED;
+    config.output_pins[3] = NRFX_PWM_PIN_NOT_USED;
+
+    config.irq_priority = 6;
+    config.base_clock = NRF_PWM_CLK_16MHz;
+    config.count_mode = NRF_PWM_MODE_UP;
+    config.top_value = 100;
+    config.load_mode = NRF_PWM_LOAD_COMMON;
+    config.step_mode = NRF_PWM_STEP_AUTO;
+
+    err = nrfx_pwm_init(&pwm0, &config, pwm0_evt_handler);
+
+    if (err != NRFX_SUCCESS)
+    {
+        return;
+    }
+
+    nrfx_pwm_simple_playback(&pwm0, &pwm0_sequence, 1, NRFX_PWM_FLAG_LOOP);
+}
+
 int main(void)
 {
     enable_vcc();
@@ -235,7 +282,7 @@ int main(void)
     nrf_drv_clock_lfclk_request(NULL);
 
     timers_init();
-
+    pwm0_init();
     spim0_display_init();
 
     while (true)

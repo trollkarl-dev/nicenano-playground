@@ -48,6 +48,14 @@
 #endif
 // <h> nRF_Libraries 
 
+#ifndef NRFX_PWM_ENABLED
+#define NRFX_PWM_ENABLED 1
+#endif
+
+#ifndef NRFX_PWM0_ENABLED
+#define NRFX_PWM0_ENABLED 1
+#endif
+
 #ifndef NRFX_SPIM_ENABLED
 #define NRFX_SPIM_ENABLED 1
 #endif
